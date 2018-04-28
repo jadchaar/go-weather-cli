@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Pallinder/go-randomdata"
@@ -185,7 +186,7 @@ func main() {
 		log.Fatalln("Please enter a 5 digit zip code")
 	}
 
-	// https://maps.googleapis.com/maps/api/geocode/json?address=ZIP_OR_ADDRESS&key=YOUR_API_KEY
+	// https://maps.googleapis.com/maps/api/geocode/json?address=[ZIP_OR_ADDRESS]&key=[YOUR_API_KEY]
 	googleMapsURL := url.URL{Scheme: "https", Host: "maps.googleapis.com", Path: "maps/api/geocode/json"}
 	q := googleMapsURL.Query()
 	q.Set("address", *zipCode)
@@ -208,6 +209,24 @@ func main() {
 	current := darkSkyData.Currently
 	icon := parseIcon(current.Icon)
 	fmt.Println(icon)
+
+	timeString := parseTime(current.Time, darkSkyData.Timezone)
+	fmt.Println(timeString)
+}
+
+func parseTime(currentTime int, timezone string) time.Time {
+	parsedTime, err := strconv.ParseInt(strconv.Itoa(currentTime), 10, 64)
+	if err != nil {
+		log.Fatalln("Error with time conversion:", err)
+	}
+	utcTime := time.Unix(parsedTime, 0)
+
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		log.Fatalln("Error with timezone conversion:", err)
+	}
+
+	return utcTime.In(loc)
 }
 
 func makeGetRequest(url string, target interface{}) {
