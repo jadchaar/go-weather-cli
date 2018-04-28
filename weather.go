@@ -10,60 +10,49 @@ import (
 	"os"
 	"time"
 
-	"github.com/jasonwinn/geocoder"
+	"github.com/Pallinder/go-randomdata"
 	"github.com/joho/godotenv"
 )
 
-type MapQuest struct {
-	Info struct {
-		Statuscode int `json:"statuscode"`
-		Copyright  struct {
-			Text         string `json:"text"`
-			ImageURL     string `json:"imageUrl"`
-			ImageAltText string `json:"imageAltText"`
-		} `json:"copyright"`
-		Messages []interface{} `json:"messages"`
-	} `json:"info"`
-	Options struct {
-		MaxResults        int  `json:"maxResults"`
-		ThumbMaps         bool `json:"thumbMaps"`
-		IgnoreLatLngInput bool `json:"ignoreLatLngInput"`
-	} `json:"options"`
+type Geocoder struct {
 	Results []struct {
-		ProvidedLocation struct {
-			Location string `json:"location"`
-		} `json:"providedLocation"`
-		Locations []struct {
-			Street             string `json:"street"`
-			AdminArea6         string `json:"adminArea6"`
-			AdminArea6Type     string `json:"adminArea6Type"`
-			AdminArea5         string `json:"adminArea5"`
-			AdminArea5Type     string `json:"adminArea5Type"`
-			AdminArea4         string `json:"adminArea4"`
-			AdminArea4Type     string `json:"adminArea4Type"`
-			AdminArea3         string `json:"adminArea3"`
-			AdminArea3Type     string `json:"adminArea3Type"`
-			AdminArea1         string `json:"adminArea1"`
-			AdminArea1Type     string `json:"adminArea1Type"`
-			PostalCode         string `json:"postalCode"`
-			GeocodeQualityCode string `json:"geocodeQualityCode"`
-			GeocodeQuality     string `json:"geocodeQuality"`
-			DragPoint          bool   `json:"dragPoint"`
-			SideOfStreet       string `json:"sideOfStreet"`
-			LinkID             string `json:"linkId"`
-			UnknownInput       string `json:"unknownInput"`
-			Type               string `json:"type"`
-			LatLng             struct {
+		AddressComponents []struct {
+			LongName  string   `json:"long_name"`
+			ShortName string   `json:"short_name"`
+			Types     []string `json:"types"`
+		} `json:"address_components"`
+		FormattedAddress string `json:"formatted_address"`
+		Geometry         struct {
+			Bounds struct {
+				Northeast struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"northeast"`
+				Southwest struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"southwest"`
+			} `json:"bounds"`
+			Location struct {
 				Lat float64 `json:"lat"`
 				Lng float64 `json:"lng"`
-			} `json:"latLng"`
-			DisplayLatLng struct {
-				Lat float64 `json:"lat"`
-				Lng float64 `json:"lng"`
-			} `json:"displayLatLng"`
-			MapURL string `json:"mapUrl"`
-		} `json:"locations"`
+			} `json:"location"`
+			LocationType string `json:"location_type"`
+			Viewport     struct {
+				Northeast struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"northeast"`
+				Southwest struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"southwest"`
+			} `json:"viewport"`
+		} `json:"geometry"`
+		PlaceID string   `json:"place_id"`
+		Types   []string `json:"types"`
 	} `json:"results"`
+	Status string `json:"status"`
 }
 
 type Forecast struct {
@@ -185,39 +174,46 @@ func main() {
 		log.Fatalln("Error loading .env file")
 	}
 
-	darkSkyApiKey := os.Getenv("DARK_SKY_API_KEY")
-	geocoder.SetAPIKey(os.Getenv("MAPQUEST_API_KEY"))
+	DARK_SKY_API_KEY := os.Getenv("DARK_SKY_API_KEY")
+	GOOGLE_MAPS_API_KEY := os.Getenv("GOOGLE_MAPS_API_KEY")
 
-	zipCode := flag.String("zip", "48108", "Zip code to obtain weather forecast")
+	zipCode := flag.String("zip", randomdata.PostalCode("SE"), "Zip code to obtain weather forecast")
 	flag.Parse()
+	// TODO: Add flag for entering address (need to url escape it), use randomdata.Address() as default
 
 	if len(*zipCode) != 5 {
 		log.Fatalln("Please enter a 5 digit zip code")
 	}
 
-	fmt.Println("Obtaining weather for", *zipCode)
-
-	lat, lon, err := geocoder.Geocode(*zipCode)
-	if err != nil {
-		log.Fatalln("Error with geocoder")
-	}
+	// https://maps.googleapis.com/maps/api/geocode/json?address=ZIP_OR_ADDRESS&key=YOUR_API_KEY
+	googleMapsURL := url.URL{Scheme: "https", Host: "maps.googleapis.com", Path: "maps/api/geocode/json"}
+	q := googleMapsURL.Query()
+	q.Set("address", *zipCode)
+	q.Set("key", GOOGLE_MAPS_API_KEY)
+	googleMapsURL.RawQuery = q.Encode()
+	googleMapsData := Geocoder{}
+	makeGetRequest(googleMapsURL.String(), &googleMapsData)
+	lat := googleMapsData.Results[0].Geometry.Location.Lat
+	lon := googleMapsData.Results[0].Geometry.Location.Lng
+	address := googleMapsData.Results[0].FormattedAddress
+	fmt.Println("Obtaining weather for", address)
 
 	// https://api.darksky.net/forecast/[key]/[latitude],[longitude]
-	urlPath := fmt.Sprintf("forecast/%v/%v,%v", darkSkyApiKey, lat, lon)
-	darkSkyURL := (url.URL{Scheme: "https", Host: "api.darksky.net", Path: urlPath})
+	urlPath := fmt.Sprintf("forecast/%v/%v,%v", DARK_SKY_API_KEY, lat, lon)
+	darkSkyURL := url.URL{Scheme: "https", Host: "api.darksky.net", Path: urlPath}
 	// fmt.Println("Request URL:", darkSkyURL.String())
 
-	data := Forecast{}
-	weatherRequest(darkSkyURL.String(), &data)
-	current := data.Currently
+	darkSkyData := Forecast{}
+	makeGetRequest(darkSkyURL.String(), &darkSkyData)
+	current := darkSkyData.Currently
 	icon := parseIcon(current.Icon)
 	fmt.Println(icon)
 }
 
-func weatherRequest(darkSkyURL string, target interface{}) {
-	res, err := httpClient.Get(darkSkyURL)
+func makeGetRequest(url string, target interface{}) {
+	res, err := httpClient.Get(url)
 	if err != nil {
-		log.Fatalln("Error request to", darkSkyURL)
+		log.Fatalln("Error in request to", url)
 	}
 
 	defer res.Body.Close()
