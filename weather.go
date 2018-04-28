@@ -14,7 +14,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type Weather struct {
+type Forecast struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 	Timezone  string  `json:"timezone"`
@@ -153,9 +153,10 @@ func main() {
 	darkSkyURL := (url.URL{Scheme: "https", Host: "api.darksky.net", Path: urlPath})
 	// fmt.Println(darkSkyURL.String())
 
-	data := Weather{}
+	data := Forecast{}
 	makeWeatherRequest(darkSkyURL.String(), &data)
-	fmt.Println(data.Timezone)
+	icon := parseIcon(data.Currently.Icon)
+	fmt.Println(icon)
 }
 
 func makeWeatherRequest(darkSkyURL string, target interface{}) {
@@ -170,5 +171,32 @@ func makeWeatherRequest(darkSkyURL string, target interface{}) {
 
 	if err != nil {
 		log.Fatalln("Error in JSON decoding:", err)
+	}
+}
+
+func parseIcon(icon string) string {
+	switch icon {
+	case "clear-day":
+		return "☀️"
+	case "clear-night":
+		return "🌚"
+	case "rain":
+		return "☔️"
+	case "snow":
+		return "❄️"
+	case "sleet":
+		return "🌨"
+	case "wind":
+		return "🌬"
+	case "fog":
+		return "🌫"
+	case "cloudy":
+		return "☁️"
+	case "partly-cloudy-day":
+		return "⛅️"
+	case "partly-cloudy-night":
+		return "🌚"
+	default:
+		return "⭐️"
 	}
 }
