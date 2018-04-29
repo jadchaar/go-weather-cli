@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -197,7 +198,6 @@ func main() {
 	lat := googleMapsData.Results[0].Geometry.Location.Lat
 	lon := googleMapsData.Results[0].Geometry.Location.Lng
 	address := googleMapsData.Results[0].FormattedAddress
-	fmt.Println("Obtaining weather for", address)
 
 	// https://api.darksky.net/forecast/[key]/[latitude],[longitude]
 	urlPath := fmt.Sprintf("forecast/%v/%v,%v", DARK_SKY_API_KEY, lat, lon)
@@ -208,10 +208,16 @@ func main() {
 	makeGetRequest(darkSkyURL.String(), &darkSkyData)
 	current := darkSkyData.Currently
 	icon := parseIcon(current.Icon)
-	fmt.Println(icon)
+	// fmt.Println(icon)
 
-	timeString := parseTime(current.Time, darkSkyData.Timezone)
-	fmt.Println(timeString)
+	time := parseTime(current.Time, darkSkyData.Timezone)
+	// fmt.Println(time)
+
+	fmt.Printf("Current conditions for %v (last updated on %v %v %v %v:%v)\n", address, time.Weekday(), time.Month(), time.Day(), time.Hour(), time.Minute())
+	fmt.Println("--------------------------------")
+	fmt.Printf("%v°   %v %v\n", current.Temperature, current.Summary, icon)
+	fmt.Printf("Wind: %v mph   Humidity: %v%%   Dew Pt: %v°   UV Index: %v   Visibility: %v+ mi   Pressure: %v mb\n", math.Round(current.WindSpeed), math.Round(current.Humidity*100), math.Round(current.DewPoint), current.UvIndex, current.Visibility, math.Round(current.Pressure))
+	fmt.Println("--------------------------------")
 }
 
 func parseTime(currentTime int, timezone string) time.Time {
