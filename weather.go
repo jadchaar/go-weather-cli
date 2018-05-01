@@ -173,33 +173,41 @@ var httpClient = &http.Client{Timeout: 10 * time.Second}
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalln("Error loading .env file")
+		panic("Error loading .env file")
 	}
 
 	DARK_SKY_API_KEY := os.Getenv("DARK_SKY_API_KEY")
 	GOOGLE_MAPS_API_KEY := os.Getenv("GOOGLE_MAPS_API_KEY")
 
-	zipCode := flag.String("zip", randomdata.PostalCode("SE"), "Zip code to obtain weather forecast")
+	// zipCode := flag.String("zip", randomdata.PostalCode("SE"), "Zip code to obtain weather forecast")
+	location := flag.String("location", randomdata.PostalCode("SE"), "Enter a location (e.g. address, zip) to obtain weather forecast")
 	flag.Parse()
-	// TODO: Add flag for entering address (need to url escape it), use randomdata.Address() as default
 
-	if len(*zipCode) != 5 {
-		log.Fatalln("Please enter a 5 digit zip code")
-	}
+	// if len(*zipCode) != 5 {
+	// 	panic("Please enter a 5 digit zip code")
+	// }
+	// Look at status from maps request
 
 	// https://maps.googleapis.com/maps/api/geocode/json?address=[ZIP_OR_ADDRESS]&key=[YOUR_API_KEY]
 	googleMapsURL := url.URL{Scheme: "https", Host: "maps.googleapis.com", Path: "maps/api/geocode/json"}
 	q := googleMapsURL.Query()
-	q.Set("address", *zipCode)
+	locationEncoded := url.QueryEscape(*location)
+	// fmt.Println(locationEncoded)
+	q.Set("address", locationEncoded)
 	q.Set("key", GOOGLE_MAPS_API_KEY)
 	googleMapsURL.RawQuery = q.Encode()
 	googleMapsData := Geocoder{}
 	makeGetRequest(googleMapsURL.String(), &googleMapsData)
+
+	if googleMapsData.Status != "OK" {
+		log.Fatalln("Invalid location. Please try again.")
+	}
+
 	lat := googleMapsData.Results[0].Geometry.Location.Lat
 	lon := googleMapsData.Results[0].Geometry.Location.Lng
 	address := googleMapsData.Results[0].FormattedAddress
 
-	// https://api.darksky.net/forecast/[key]/[latitude],[longitude]
+	// https://api.darksky.net/forecast/[KEY]/[LATITUDE],[LONGITUDE]
 	urlPath := fmt.Sprintf("forecast/%v/%v,%v", DARK_SKY_API_KEY, lat, lon)
 	darkSkyURL := url.URL{Scheme: "https", Host: "api.darksky.net", Path: urlPath}
 	// fmt.Println("Request URL:", darkSkyURL.String())
